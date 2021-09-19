@@ -1,0 +1,71 @@
+Global $s_Global_Path_MediaFile = FileGetShortName(FileOpenDialog("peek a file", @ScriptDir, "All (*.*)", 3))
+
+; path of the mpv.exe
+Global $s_Global_Path_MPV = @ScriptDir & '\AMT-mpv.exe' ; '\mpv.exe'
+$s_Global_Path_MPV = '"' & $s_Global_Path_MPV & '"'
+
+#include <NamedPipes.au3>
+#include <WinAPIFiles.au3>
+#include <WinAPIHObj.au3>
+#include <WinAPI.au3>
+#include <WinAPIProc.au3>
+#include <Date.au3>
+#include <GUIConstantsEx.au3>
+; Opt("GUIOnEventMode", 1)
+
+Global $s_Global_Pipe_Name = "\\.\pipe\AMT_mpvsocket"
+Global $h_Global_MPV_Pipe, $i_Global_MPV_PID
+
+Global $s_Screenshot_Directory = @ScriptDir & "\screen shot\"
+DirCreate($s_Screenshot_Directory)
+
+Global $h_DLL_kernel32 = DllOpen("kernel32.dll")
+
+; gui with 16:9 aspect ratio
+Global $iWidth = 800
+Global $iheight = ($iWidth / 16) * 9
+Global $hGUI = GUICreate("", $iWidth, $iheight + 40)
+
+; video placeholder
+; dimension and location of this label will be dimension and location of the video on the GUI
+Global $c_Display_Label = GUICtrlCreateLabel("", 0, 0, $iWidth, $iheight)
+
+Global $h_Slider = GUICtrlCreateSlider(0, $iheight, $iWidth, 20, 0x0010)
+GUICtrlSetLimit(-1, 100, 0) ; change min/max value
+Global $iBtnW = $iWidth / 6, $iX = 0
+Global $hButton1 = GUICtrlCreateButton("Open file", $iX, $iheight + 20, $iBtnW, 20) ; open file
+$iX += $iBtnW
+Global $hButton2 = GUICtrlCreateButton("backward 10%", $iX, $iheight + 20, $iBtnW, 20) ; backward 10%
+$iX += $iBtnW
+Global $hButton3 = GUICtrlCreateButton("play/pause", $iX, $iheight + 20, $iBtnW, 20) ; toggle play/pause
+$iX += $iBtnW
+Global $hButton4 = GUICtrlCreateButton("forward 10%", $iX, $iheight + 20, $iBtnW, 20) ; forward 10%
+$iX += $iBtnW
+Global $hButton5 = GUICtrlCreateButton("snapshot", $iX, $iheight + 20, $iBtnW, 20) ; take a snapshot
+$iX += $iBtnW
+Global $hButton6 = GUICtrlCreateButton("audio on/off", $iX, $iheight + 20, $iBtnW, 20) ; toggle audio on/off
+GUISetState()
+
+; Global $h_DLL_MediaInfo = DllOpen(@ScriptDir & "\z_MediaInfo.dll")
+Global $s_Global_MPV_Args = " --vo=direct3d, "
+$s_Global_MPV_Args &= " --vf lavfi=[scale=w=320:h=-1] " ; to prescale output > huge performance improvment for HD+ files
+$s_Global_MPV_Args &= " --vf-add=lavfi=[eq=1:0:1:1,hue=h=0] "
+
+; https://mpv.io/manual/stable/#video
+$s_Global_MPV_Args &= " --cache=yes "
+
+$s_Global_MPV_Args &= " --screenshot-format=png "
+$s_Global_MPV_Args &= " --no-keepaspect --no-config --no-quiet --terminal --no-msg-color --msg-level=ffmpeg/demuxer=error --no-fs "
+$s_Global_MPV_Args &= " --vd-lavc-threads=4 "
+
+; Specify the hardware video decoding API that should be used if possible.
+$s_Global_MPV_Args &= " --hwdec=auto "
+
+$s_Global_MPV_Args &= " --priority=abovenormal --no-input-default-bindings --input-vo-keyboard=no --no-input-cursor --cursor-autohide=no --wid=" & Number(GUICtrlGetHandle($c_Display_Label)) & " --monitorpixelaspect=1 "
+$s_Global_MPV_Args &= " --osd-level=3 --osd-scale=1 --osd-bar-align-y=0.6 "
+
+$s_Global_MPV_Args &= " --sub-auto=fuzzy "
+$s_Global_MPV_Args &= " --sub-ass --embeddedfonts --sub-ass-line-spacing=0 --sub-scale=1 --sub-font=""Bodoni MT Poster Compressed"" --sub-color=#ffffffff --sub-shadow-color=#ff000000 --sub-border-color=#ff000000 --sub-border-size=0.75 --sub-shadow-offset=2.5 "
+$s_Global_MPV_Args &= " --sub-font-size=35 --sub-bold=no --sub-italic=no "
+$s_Global_MPV_Args &= " --sub-ass-force-style=PlayResX=512,PlayResY=320,Name=Default,Fontname=""Bodoni MT Poster Compressed"",Fontsize=14,PrimaryColour=#00ffffff,BackColour=#00000000,OutlineColour=#00000000,Bold=0,Italic=0,Alignment=2,BorderStyle=1,Outline=0.3,Shadow=1,MarginL=20,MarginR=20,MarginV=8 "
+$s_Run_Commandline = $s_Global_Path_MPV & " " & $s_Global_MPV_Args & " " & $s_Global_Path_MediaFile & " --input-ipc-server=" & $s_Global_Pipe_Name
